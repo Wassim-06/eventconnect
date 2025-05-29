@@ -1,9 +1,10 @@
-// src/app/dashboard/create-event/page.tsx
 "use client";
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast'; // Importez toast
+import { LayoutDashboard, ArrowLeft, Save } from 'lucide-react'; // Importez les icônes
 
 export default function CreateEventPage() {
     const router = useRouter();
@@ -17,13 +18,11 @@ export default function CreateEventPage() {
         maxAttendees: '', // Type string pour l'input
         isPublished: false,
     });
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false); // Renommé loading en isLoading pour cohérence
+    // Suppression des états `error` et `success` au profit de `react-hot-toast`
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
-        // Gère spécifiquement les cases à cocher (checkbox)
         if (type === 'checkbox') {
             setFormData({
                 ...formData,
@@ -37,20 +36,27 @@ export default function CreateEventPage() {
         }
     };
 
+    const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value === '' ? '' : Number(value) }));
+    };
+
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setError(null);
-        setSuccess(null);
+        setIsLoading(true); // Utilisez setIsLoading
+        // setError(null); // Supprimé
+        // setSuccess(null); // Supprimé
 
         // TODO: En attendant l'implémentation de l'authentification, nous allons utiliser
         // un ID d'organisateur temporaire. REMPLACEZ-LE PAR UN VRAI ID DE VOTRE DB !
-        const tempOrganizerId = "6836d70d02ca5a4a5c91ec56"; // <-- REMPLACE CETTE VALEUR
+        // Idéalement, cet ID devrait venir du token d'authentification de l'utilisateur connecté.
+        const tempOrganizerId = "66579b5c2a1a1f337ef117d6"; // <--- ASSUREZ-VOUS QUE C'EST UN ID VALIDE DE VOTRE DB
 
         // Validation simple
         if (!formData.title || !formData.date || !formData.location || !tempOrganizerId) {
-            setError("Les champs titre, date, lieu et organisateur sont obligatoires.");
-            setLoading(false);
+            toast.error("Les champs titre, date, lieu et organisateur sont obligatoires.");
+            setIsLoading(false);
             return;
         }
 
@@ -59,14 +65,15 @@ export default function CreateEventPage() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    // Pour la création, on peut choisir d'envoyer ou non le token.
+                    // Si l'API backend exige un token pour la création, décommentez la ligne ci-dessous
+                    // 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 },
                 body: JSON.stringify({
                     ...formData,
                     maxAttendees: formData.maxAttendees ? parseInt(formData.maxAttendees, 10) : null,
-                    // MongoDB et Prisma attendent une date au format ISO, l'input date-time-local le fournit déjà
-                    // mais il faut ajouter le 'Z' pour indiquer l'heure UTC si ce n'est pas le cas pour ta DB
                     date: new Date(formData.date).toISOString(),
-                    organizerId: tempOrganizerId, // Utilise l'ID temporaire ici
+                    organizerId: tempOrganizerId,
                 }),
             });
 
@@ -76,161 +83,160 @@ export default function CreateEventPage() {
             }
 
             const newEvent = await response.json();
-            setSuccess('Événement créé avec succès !');
-            // Redirection vers la page de détails de l'événement ou le catalogue
-            router.push(`/events/${newEvent.id}`);
-            // Ou réinitialiser le formulaire
-            // setFormData({ title: '', description: '', date: '', location: '', imageUrl: '', category: '', maxAttendees: '', isPublished: false });
-
+            toast.success('Événement créé avec succès !');
+            router.push('/dashboard'); // Rediriger vers le tableau de bord ou la liste des événements
         } catch (err: any) {
             console.error('Erreur lors de la création de l\'événement :', err);
-            setError(err.message || 'Une erreur est survenue lors de la création de l\'événement.');
+            toast.error(err.message || 'Une erreur est survenue lors de la création de l\'événement.');
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">
-            <nav className="bg-white shadow-sm py-4 px-6 w-full max-w-4xl rounded-lg mb-8 flex justify-between items-center">
-                <Link href="/" className="text-2xl font-bold text-blue-600 hover:text-blue-800 transition-colors">
-                    EventConnect
-                </Link>
-                <div className="flex items-center space-x-4">
-                    <Link href="/events" className="text-gray-700 hover:text-blue-600 font-medium">
-                        Tous les événements
-                    </Link>
-                    <Link href="/dashboard" className="text-gray-700 hover:text-blue-600 font-medium">
-                        Tableau de bord
+        <div className="min-h-screen bg-gray-50 flex">
+            {/* Barre Latérale */}
+            <aside className="w-64 bg-white border-r border-gray-200 flex flex-col fixed h-full">
+                <div className="p-6">
+                    <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
+                        EventConnect
                     </Link>
                 </div>
-            </nav>
+                <nav className="flex-1 px-4 py-2 space-y-2">
+                    <Link href="/dashboard" className="flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg">
+                        <LayoutDashboard className="mr-3 h-5 w-5" /> Retour au Dashboard
+                    </Link>
+                </nav>
+            </aside>
 
-            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-xl">
-                <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">Créer un Nouvel Événement</h1>
+            {/* Main content */}
+            <main className="flex-1 ml-64 p-8">
+                <header className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Créer un Nouvel Événement</h1>
+                        <p className="text-gray-500 mt-1">Remplissez les informations pour votre nouvel événement.</p>
+                    </div>
+                    <Link href="/dashboard" className="bg-gray-200 text-gray-700 px-5 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors shadow-sm flex items-center">
+                        <ArrowLeft className="mr-2 h-5 w-5" /> Annuler
+                    </Link>
+                </header>
 
-                {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                        <strong className="font-bold">Erreur :</strong>
-                        <span className="block sm:inline"> {error}</span>
-                    </div>
-                )}
+                <section className="bg-white p-8 rounded-xl shadow-md border border-gray-200">
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
+                            <label htmlFor="title" className="block text-sm font-medium text-gray-700">Titre de l'événement</label>
+                            <input
+                                type="text"
+                                name="title"
+                                id="title"
+                                value={formData.title}
+                                onChange={handleChange}
+                                required
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
+                            <textarea
+                                name="description"
+                                id="description"
+                                value={formData.description}
+                                onChange={handleChange}
+                                rows={4}
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            ></textarea>
+                        </div>
+                        <div>
+                            <label htmlFor="date" className="block text-sm font-medium text-gray-700">Date et Heure</label>
+                            <input
+                                type="datetime-local"
+                                name="date"
+                                id="date"
+                                value={formData.date}
+                                onChange={handleChange}
+                                required
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="location" className="block text-sm font-medium text-gray-700">Lieu</label>
+                            <input
+                                type="text"
+                                name="location"
+                                id="location"
+                                value={formData.location}
+                                onChange={handleChange}
+                                required
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="imageUrl" className="block text-sm font-medium text-gray-700">URL de l'image (optionnel)</label>
+                            <input
+                                type="url"
+                                name="imageUrl"
+                                id="imageUrl"
+                                value={formData.imageUrl}
+                                onChange={handleChange}
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="category" className="block text-sm font-medium text-gray-700">Catégorie (ex: Conférence, Atelier)</label>
+                            <input
+                                type="text"
+                                name="category"
+                                id="category"
+                                value={formData.category}
+                                onChange={handleChange}
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="maxAttendees" className="block text-sm font-medium text-gray-700">Capacité maximale (optionnel)</label>
+                            <input
+                                type="number"
+                                name="maxAttendees"
+                                id="maxAttendees"
+                                value={formData.maxAttendees}
+                                onChange={handleNumberChange} // Utiliser handleNumberChange
+                                min="0"
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div className="flex items-center">
+                            <input
+                                type="checkbox"
+                                id="isPublished"
+                                name="isPublished"
+                                checked={formData.isPublished}
+                                onChange={handleChange}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor="isPublished" className="ml-2 block text-sm text-gray-900">Publier l'événement maintenant</label>
+                        </div>
 
-                {success && (
-                    <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
-                        <strong className="font-bold">Succès !</strong>
-                        <span className="block sm:inline"> {success}</span>
-                    </div>
-                )}
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label htmlFor="title" className="block text-gray-700 text-sm font-bold mb-2">Titre de l'événement</label>
-                        <input
-                            type="text"
-                            id="title"
-                            name="title"
-                            value={formData.title}
-                            onChange={handleChange}
-                            required
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="description" className="block text-gray-700 text-sm font-bold mb-2">Description</label>
-                        <textarea
-                            id="description"
-                            name="description"
-                            value={formData.description}
-                            onChange={handleChange}
-                            rows={4}
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        ></textarea>
-                    </div>
-                    <div>
-                        <label htmlFor="date" className="block text-gray-700 text-sm font-bold mb-2">Date et Heure</label>
-                        <input
-                            type="datetime-local"
-                            id="date"
-                            name="date"
-                            value={formData.date}
-                            onChange={handleChange}
-                            required
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="location" className="block text-gray-700 text-sm font-bold mb-2">Lieu</label>
-                        <input
-                            type="text"
-                            id="location"
-                            name="location"
-                            value={formData.location}
-                            onChange={handleChange}
-                            required
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="imageUrl" className="block text-gray-700 text-sm font-bold mb-2">URL de l'image (optionnel)</label>
-                        <input
-                            type="url"
-                            id="imageUrl"
-                            name="imageUrl"
-                            value={formData.imageUrl}
-                            onChange={handleChange}
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="category" className="block text-gray-700 text-sm font-bold mb-2">Catégorie (ex: Conférence, Atelier)</label>
-                        <input
-                            type="text"
-                            id="category"
-                            name="category"
-                            value={formData.category}
-                            onChange={handleChange}
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="maxAttendees" className="block text-gray-700 text-sm font-bold mb-2">Nombre Max de Participants (optionnel)</label>
-                        <input
-                            type="number"
-                            id="maxAttendees"
-                            name="maxAttendees"
-                            value={formData.maxAttendees}
-                            onChange={handleChange}
-                            min="1"
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        />
-                    </div>
-                    <div className="flex items-center">
-                        <input
-                            type="checkbox"
-                            id="isPublished"
-                            name="isPublished"
-                            checked={formData.isPublished}
-                            onChange={handleChange}
-                            className="mr-2 leading-tight"
-                        />
-                        <label htmlFor="isPublished" className="text-sm text-gray-700">Publier l'événement maintenant</label>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors duration-200 disabled:bg-gray-400"
-                        >
-                            {loading ? 'Création en cours...' : 'Créer l\'événement'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-            {/* Pied de page */}
-            <footer className="w-full max-w-4xl text-center text-gray-500 text-sm mt-8 py-4">
-                &copy; {new Date().getFullYear()} EventConnect. Tous droits réservés.
-            </footer>
+                        <div className="flex justify-end">
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                        Création...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="mr-2 h-5 w-5" /> Créer l'événement
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </main>
         </div>
     );
 }

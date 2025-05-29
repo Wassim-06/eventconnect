@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EventConnect - Votre Plateforme de Gestion d'Événements Tout-en-Un
 
-## Getting Started
+![EventConnect Logo Placeholder](/public/Logo.png)
 
-First, run the development server:
+EventConnect est une application web full-stack moderne et performante, conçue pour simplifier la création, la gestion, la promotion et l'analyse d'événements. Elle offre une suite complète d'outils pour les organisateurs, leur permettant d'engager leur public et de prendre des décisions éclairées grâce à une interface utilisateur intuitive et des fonctionnalités robustes.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## ✨ Fonctionnalités Clés
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+*   **Authentification Sécurisée** : Système d'inscription et de connexion basé sur les tokens (JWT) pour les organisateurs.
+*   **Tableau de Bord Intuitif** : Un hub centralisé pour une gestion efficace des événements, la visualisation des analyses et l'accès aux paramètres du compte.
+*   **Gestion Complète des Événements** :
+    *   Création d'événements détaillés : titres, descriptions, dates, lieux, images, catégories, capacité maximale.
+    *   Publication et dépublication d'événements.
+    *   Affichage clair de la liste des événements créés par l'organisateur.
+    *   Suppression sécurisée d'événements avec confirmation.
+    *   (Prochainement) Modification des événements existants.
+*   **Catalogue Public d'Événements** : Une page dédiée permettant aux utilisateurs de découvrir les événements publiés.
+*   **Analyses et Rapports** : Une section Analytics pour visualiser les performances et tendances des événements (actuellement avec des données de démonstration, prête pour l'intégration de données réelles).
+*   **Paramètres Utilisateur Personnalisables** : Gestion du profil, des préférences de notification et des options de sécurité.
+*   **Aide et Support Intégrés** : Section FAQ, informations de contact et liens vers la documentation.
+*   **Design Réactif et Moderne** : Expérience utilisateur optimisée sur ordinateurs de bureau, tablettes et mobiles.
+*   **Notifications en Temps Réel** : Feedback utilisateur clair et instantané grâce à `react-hot-toast`.
+*   **Interface Soignée** : Utilisation de `lucide-react` pour des icônes cohérentes et esthétiques.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🛠️ Stack Technique
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Ce projet met en œuvre des technologies modernes et des bonnes pratiques pour garantir performance, maintenabilité et une excellente expérience développeur :
 
-## Learn More
+*   **Frontend** :
+    *   **Next.js 14+ (App Router)** : Framework React de production avec rendu côté serveur (SSR), génération de sites statiques (SSG), et une architecture moderne.
+    *   **React 18** : Bibliothèque JavaScript pour la construction d'interfaces utilisateur dynamiques et interactives.
+    *   **TypeScript** : Sur-ensemble de JavaScript apportant un typage statique pour une meilleure qualité de code, une détection précoce des erreurs et une auto-complétion améliorée.
+    *   **Tailwind CSS** : Framework CSS utility-first pour un développement UI rapide et personnalisable.
+    *   **Lucide React**: Bibliothèque d'icônes SVG légères et personnalisables.
+    *   **Recharts**: Bibliothèque de graphiques composable pour la visualisation de données.
+    *   **React Hot Toast**: Notifications toast élégantes et non intrusives.
+*   **Backend (API)** :
+    *   **Next.js API Routes** : Construction d'endpoints API robustes et scalables directement au sein du projet Next.js.
+    *   **Prisma ORM**: ORM de nouvelle génération pour une interaction type-safe avec la base de données (compatible PostgreSQL, MySQL, SQLite, SQL Server, MongoDB).
+*   **Authentification** :
+    *   Système d'authentification basé sur les tokens JWT, avec stockage sécurisé côté client (`localStorage`).
+    *   Middleware d'authentification pour la protection des routes API.
+*   **Base de Données** :
+    *   (Précisez votre base de données, ex: PostgreSQL, MongoDB). Prisma gère la communication.
+*   **Qualité de Code et Outillage** :
+    *   **ESLint & Prettier**: Pour le linting et le formatage automatique du code, garantissant une base de code cohérente et propre.
+    *   **Gestion des Dépendances**: (npm/yarn/pnpm - précisez celui que vous utilisez).
 
-To learn more about Next.js, take a look at the following resources:
+## 📂 Structure du Projet
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Le projet est organisé de manière logique pour faciliter la navigation et la maintenance :
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

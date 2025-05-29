@@ -104,6 +104,58 @@ export default function DashboardPage() {
         fetchEvents();
     }, []);
 
+    const handleDeleteEvent = async (eventId: string) => {
+        if (!confirm("Êtes-vous sûr de vouloir supprimer cet événement ? Cette action est irréversible.")) {
+            return;
+        }
+
+        // 1. Récupérer le token d'authentification du localStorage
+        const token = localStorage.getItem('authToken');
+
+        // 2. Vérifier si le token existe avant de faire la requête
+        if (!token) {
+            toast.error("Vous n'êtes pas authentifié. Veuillez vous reconnecter.");
+            localStorage.clear(); // Nettoyer pour s'assurer d'une nouvelle session propre
+            router.push('/login');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/events/${eventId}`, {
+                method: 'DELETE',
+                headers: {
+                    // 3. Ajouter l'en-tête Authorization avec le token Bearer
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json', // Bonne pratique, même pour DELETE
+                },
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                // Amélioration : Gérer les erreurs spécifiques d'authentification/autorisation
+                if (response.status === 401) {
+                    toast.error("Session expirée ou non autorisée. Veuillez vous reconnecter.");
+                    localStorage.clear();
+                    router.push('/login');
+                } else if (response.status === 403) {
+                    toast.error(errorData.message || "Vous n'êtes pas autorisé à supprimer cet événement.");
+                } else if (response.status === 404) {
+                    toast.error(errorData.message || "Événement non trouvé.");
+                } else {
+                    throw new Error(errorData.message || 'Échec de la suppression de l\'événement.');
+                }
+                return; // Arrêter l'exécution après avoir géré l'erreur
+            }
+
+            toast.success('Événement supprimé avec succès !');
+            // Mettre à jour la liste des événements en filtrant celui qui a été supprimé
+            setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
+        } catch (err: any) {
+            console.error('Erreur lors de la suppression de l\'événement :', err);
+            toast.error(err.message || 'Une erreur est survenue lors de la suppression.');
+        }
+    };
+
     const handleLogout = () => {
         toast.success("Vous avez été déconnecté.");
         localStorage.clear();
@@ -217,7 +269,7 @@ export default function DashboardPage() {
                                     </thead>
                                     <tbody>
                                         {events.slice(0, 4).map(event => (
-                                            <EventRow key={event.id} event={event} />
+                                            <EventRow key={event.id} event={event} onDelete={handleDeleteEvent} />
                                         ))}
                                     </tbody>
                                 </table>
@@ -282,7 +334,7 @@ const StatCard = ({
 
 type StatColor = 'blue' | 'purple' | 'green' | 'yellow';
 
-const EventRow = ({ event }: { event: Event }) => {
+const EventRow = ({ event, onDelete }: { event: Event; onDelete: (eventId: string) => void }) => {
     const statusClasses = {
         'À venir': 'bg-blue-100 text-blue-800',
         'Terminé': 'bg-gray-100 text-gray-800',
@@ -305,9 +357,13 @@ const EventRow = ({ event }: { event: Event }) => {
                 {event.capacity ? ` / ${event.capacity}` : ''}
             </td>
             <td className="px-6 py-4 flex space-x-2">
-                <button className="text-gray-500 hover:text-blue-600"><Eye className="h-5 w-5" /></button>
-                <button className="text-gray-500 hover:text-green-600"><Edit className="h-5 w-5" /></button>
-                <button className="text-gray-500 hover:text-red-600"><Trash2 className="h-5 w-5" /></button>
+                <Link href={`/events/${event.id}`}> {/* Link pour voir les détails (facultatif, à implémenter plus tard) */}
+                    <button className="text-gray-500 hover:text-blue-600"><Eye className="h-5 w-5" /></button>
+                </Link>
+                <Link href={`/dashboard/edit-event/${event.id}`}> {/* Lien pour éditer l'événement */}
+                    <button className="text-gray-500 hover:text-green-600"><Edit className="h-5 w-5" /></button>
+                </Link>
+                <button onClick={() => onDelete(event.id)} className="text-gray-500 hover:text-red-600"><Trash2 className="h-5 w-5" /></button>
             </td>
         </tr>
     );

@@ -25,11 +25,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) { // <-- CHANGE Request EN NextRequest
-    const authResult = await authMiddleware(req);
-    if (authResult instanceof NextResponse) {
-        return authResult;
-    }
-    const { userId } = authResult;
     const eventId = params.id;
 
     try {
@@ -42,10 +37,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
         if (!existingEvent) {
             return NextResponse.json({ message: 'Événement non trouvé.' }, { status: 404 });
-        }
-
-        if (existingEvent.organizerId !== userId) {
-            return NextResponse.json({ message: 'Non autorisé à modifier cet événement.' }, { status: 403 });
         }
 
         const updatedEvent = await prisma.event.update({
@@ -66,12 +57,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) { // <-- CHANGE Request EN NextRequest
-    const authResult = await authMiddleware(req);
-    if (authResult instanceof NextResponse) {
-        return authResult;
-    }
-    const { userId } = authResult;
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+    // Supprimez les lignes suivantes qui appellent et vérifient le middleware d'authentification:
+    // const authResult = await authMiddleware(req);
+    // if (authResult instanceof NextResponse) {
+    //     return authResult;
+    // }
+    // const { userId } = authResult; // Cette ligne deviendra indéfinie ou nécessitera un contournement
+
     const eventId = params.id;
 
     try {
@@ -84,15 +77,18 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
             return NextResponse.json({ message: 'Événement non trouvé.' }, { status: 404 });
         }
 
-        if (existingEvent.organizerId !== userId) {
-            return NextResponse.json({ message: 'Non autorisé à supprimer cet événement.' }, { status: 403 });
-        }
+        // Si vous retirez l'authentification, vous ne pouvez PAS faire cette vérification.
+        // Si vous la laissez, userId sera indéfini et cette condition sera vraie pour n'importe quel événement.
+        // C'est pourquoi enlevez-la si vous désactivez *totalement* l'auth.
+        // if (existingEvent.organizerId !== userId) {
+        //     return NextResponse.json({ message: 'Non autorisé à supprimer cet événement.' }, { status: 403 });
+        // }
 
         await prisma.event.delete({
             where: { id: eventId },
         });
 
-        return NextResponse.json({ message: 'Événement supprimé avec succès.' }, { status: 204 });
+        return new NextResponse(null, { status: 204 });
     } catch (error: any) {
         if (error.code === 'P2025') {
             return NextResponse.json({ message: 'Événement non trouvé.' }, { status: 404 });
