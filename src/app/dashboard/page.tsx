@@ -4,16 +4,43 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { User } from '../../generated/prisma'; // Importe le type User de Prisma
-import { toast } from 'react-hot-toast'; // Importe toast pour les notifications
+import Image from 'next/image';
+import { User } from '../../generated/prisma';
+import { toast } from 'react-hot-toast';
+import {
+    LayoutDashboard, Home, Calendar, BarChart2, Settings, LifeBuoy, LogOut,
+    PlusCircle, Users, Ticket, DollarSign, MoreVertical, Edit, Trash2, Eye
+} from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-// Définis un type pour un événement simulé (pour l'affichage en attendant le backend)
+// Petite fonction pour générer le nombre d’inscrits par mois (exemple)
+function getInscriptionsParMois(events: Event[]) {
+    const map: { [mois: string]: number } = {};
+    events.forEach(evt => {
+        const date = new Date(evt.date);
+        const mois = date.toLocaleString('fr-FR', { month: 'short', year: 'numeric' });
+        map[mois] = (map[mois] || 0) + (evt.attendees || 0);
+    });
+    // Convertir en tableau trié par date
+    return Object.entries(map).map(([name, inscrits]) => ({ name, inscrits }))
+        .sort((a, b) => {
+            const [mA, yA] = a.name.split(' ');
+            const [mB, yB] = b.name.split(' ');
+            return new Date(`01 ${mA} ${yA}`).getTime() - new Date(`01 ${mB} ${yB}`).getTime();
+        });
+}
+
 interface Event {
     id: string;
     title: string;
-    date: string;
+    date: string; // string car on fetch du JSON (pense à new Date plus bas)
     location: string;
-    status: 'confirmé' | 'annulé' | 'terminé';
+    attendees: number;
+    capacity?: number;
+    revenue?: number;
+    status: 'À venir' | 'Terminé' | 'Annulé';
+    organizer?: { id: string; name: string; email: string };
+    // ajoute d'autres champs si besoin
 }
 
 export default function DashboardPage() {
@@ -21,125 +48,75 @@ export default function DashboardPage() {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [events, setEvents] = useState<Event[]>([]);
+    const [eventsLoading, setEventsLoading] = useState(true);
 
-    // State for the modal
-    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-    // States for the form fields inside the modal
-    const [profileName, setProfileName] = useState('');
-    const [profileEmail, setProfileEmail] = useState('');
-    const [isUpdatingProfile, setIsUpdatingProfile] = useState(false); // Loading state for modal form
-    const [profileError, setProfileError] = useState<string | null>(null); // Error state for modal form
-
-
-    // Données d'événements simulées pour l'affichage
-    const upcomingEvents: Event[] = [
-        { id: 'evt001', title: 'Conférence Tech Connect', date: '10 juillet 2025', location: 'Paris', status: 'confirmé' },
-        { id: 'evt002', title: 'Workshop Design UX', date: '22 août 2025', location: 'Lyon', status: 'confirmé' },
-        { id: 'evt003', title: 'Meetup Cyber Sécurité', date: '05 septembre 2025', location: 'Marseille', status: 'confirmé' },
-    ];
-
-    const pastEvents: Event[] = [
-        { id: 'evt004', title: 'Hackathon Innovation', date: '15 avril 2025', location: 'Bordeaux', status: 'terminé' },
-    ];
-
-    // Effect for initial user data loading and authentication check
     useEffect(() => {
         const token = localStorage.getItem('authToken');
         const userString = localStorage.getItem('user');
-
-        if (!token) {
-            setError("Vous n'êtes pas connecté. Redirection...");
-            toast.error("Vous n'êtes pas connecté. Redirection...");
-            setTimeout(() => router.push('/login'), 1500);
+        if (!token || !userString) {
+            toast.error("Session invalide. Veuillez vous reconnecter.");
+            localStorage.clear();
+            router.push('/login');
             return;
         }
-
         try {
-            if (userString) {
-                const parsedUser: User = JSON.parse(userString);
-                setUser(parsedUser);
-                // Initialize profile form fields with current user data
-                setProfileName(parsedUser.name || '');
-                setProfileEmail(parsedUser.email || '');
-            } else {
-                setError("Données utilisateur introuvables. Redirection...");
-                toast.error("Données utilisateur introuvables. Veuillez vous reconnecter.");
-                localStorage.removeItem('authToken');
-                localStorage.removeItem('user');
-                setTimeout(() => router.push('/login'), 1500);
-            }
+            const parsedUser: User = JSON.parse(userString);
+            setUser(parsedUser);
         } catch (e) {
-            console.error("Erreur lors du parsing des données utilisateur:", e);
-            setError("Erreur de récupération des données utilisateur. Redirection...");
-            toast.error("Erreur de récupération des données utilisateur. Veuillez vous reconnecter.");
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            setTimeout(() => router.push('/login'), 1500);
+            toast.error("Erreur de données utilisateur. Reconnexion requise.");
+            localStorage.clear();
+            router.push('/login');
         } finally {
             setIsLoading(false);
         }
     }, [router]);
 
-    // Function to handle profile update from the modal
-    const handleProfileUpdate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsUpdatingProfile(true);
-        setProfileError(null);
-
-        try {
-            const token = localStorage.getItem('authToken');
-            if (!token) {
-                toast.error('Token manquant, veuillez vous reconnecter.');
-                router.push('/login');
-                return;
+    // Fetch real events from the API
+    useEffect(() => {
+        async function fetchEvents() {
+            setEventsLoading(true);
+            try {
+                const res = await fetch('/api/events');
+                if (!res.ok) throw new Error('Erreur lors du chargement des événements.');
+                const data = await res.json();
+                // Statut "À venir", "Terminé", "Annulé" déterminé selon date et currentAttendees/maxAttendees
+                const now = new Date();
+                setEvents(data.map((evt: any) => {
+                    let status: Event["status"] = 'À venir';
+                    if (evt.date && new Date(evt.date) < now) status = 'Terminé';
+                    // (Facultatif : un champ dans la DB ou une logique d'annulation à ajouter plus tard)
+                    return {
+                        ...evt,
+                        date: evt.date, // string, on parse au besoin plus bas
+                        attendees: evt.currentAttendees || 0,
+                        capacity: evt.maxAttendees,
+                        revenue: 0, // Pas encore géré (tu pourras le faire avec bookings/tickets)
+                        status,
+                    }
+                }));
+            } catch (e: any) {
+                toast.error(e.message || "Impossible de charger les événements.");
+            } finally {
+                setEventsLoading(false);
             }
-
-            const res = await fetch('/api/profile', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                // Send only the name as email is readOnly
-                body: JSON.stringify({ name: profileName }),
-            });
-
-            if (res.status === 401 || res.status === 403) {
-                toast.error('Votre session a expiré ou est invalide. Veuillez vous reconnecter.');
-                router.push('/login');
-                return;
-            }
-
-            if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.message || 'Erreur lors de la mise à jour du profil.');
-            }
-
-            const updatedUser = await res.json();
-            setUser(updatedUser); // Update local user state with new data
-            localStorage.setItem('user', JSON.stringify(updatedUser)); // Update localStorage
-
-            toast.success('Profil mis à jour avec succès !');
-            setIsProfileModalOpen(false); // Close the modal on success
-        } catch (err: any) {
-            setProfileError(err.message);
-            toast.error(err.message);
-        } finally {
-            setIsUpdatingProfile(false);
         }
-    };
-
+        fetchEvents();
+    }, []);
 
     const handleLogout = () => {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
+        toast.success("Vous avez été déconnecté.");
+        localStorage.clear();
         router.push('/login');
     };
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-                <p className="text-gray-600 text-lg animate-pulse">Chargement de votre tableau de bord...</p>
+            <div className="min-h-screen flex items-center justify-center bg-gray-100">
+                <div className="flex items-center space-x-3">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="text-gray-600 text-lg">Chargement de votre espace...</p>
+                </div>
             </div>
         );
     }
@@ -152,152 +129,186 @@ export default function DashboardPage() {
         );
     }
 
+    // KPIs dynamiques
+    const upcomingEventsCount = events.filter(e => e.status === 'À venir').length;
+    const totalAttendees = events.reduce((sum, e) => sum + (e.attendees || 0), 0);
+    const totalRevenue = events.reduce((sum, e) => sum + (e.revenue || 0), 0);
+
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            {/* Barre de navigation */}
-            <nav className="bg-white shadow-sm py-4 px-6 flex justify-between items-center border-b border-gray-200">
-                <Link href="/" className="text-2xl font-bold text-blue-600 hover:text-blue-800 transition-colors">
-                    EventConnect
-                </Link>
-                <div className="flex items-center space-x-4">
-                    <span className="text-gray-700 font-medium">Bonjour, {user?.name || 'Utilisateur'}</span>
-                    <button
-                        onClick={handleLogout}
-                        className="py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-400"
-                    >
-                        Déconnexion
-                    </button>
+        <div className="min-h-screen bg-gray-50 flex">
+            {/* ===== Barre Latérale (Sidebar) ===== */}
+            <aside className="w-64 bg-white border-r border-gray-200 flex flex-col fixed h-full">
+                <div className="p-6">
+                    <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
+                        EventConnect
+                    </Link>
                 </div>
-            </nav>
-
-            {/* Contenu principal du tableau de bord */}
-            <main className="flex-1 p-6 lg:p-10">
-                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-
-                    {/* Section Profil rapide */}
-                    <div className="md:col-span-1 bg-white p-6 rounded-lg shadow-md border border-gray-200 h-fit">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-4">Votre Profil</h2>
-                        <div className="flex items-center space-x-4 mb-4">
-                            {/* Un avatar fictif ou réel si tu en as un */}
-                            <div className="w-16 h-16 bg-blue-200 rounded-full flex items-center justify-center text-blue-800 text-3xl font-bold">
-                                {user?.name ? user.name.charAt(0).toUpperCase() : '?'}
-                            </div>
-                            <div>
-                                <p className="text-xl font-semibold text-gray-900">{user?.name}</p>
-                                <p className="text-sm text-gray-600">{user?.email}</p>
-                            </div>
+                <nav className="flex-1 px-4 py-2 space-y-2">
+                    <Link href="/dashboard" className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg">
+                        <LayoutDashboard className="mr-3 h-5 w-5" /> Tableau de bord
+                    </Link>
+                    <Link href="/events" className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <Calendar className="mr-3 h-5 w-5" /> Mes Événements
+                    </Link>
+                    <Link href="/dashboard/analytics" className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <BarChart2 className="mr-3 h-5 w-5" /> Analytics
+                    </Link>
+                    <Link href="/dashboard/settings" className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <Settings className="mr-3 h-5 w-5" /> Paramètres
+                    </Link>
+                    <Link href="/dashboard/help" className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <LifeBuoy className="mr-3 h-5 w-5" /> Aide & Support
+                    </Link>
+                </nav>
+                <div className="p-4 border-t border-gray-200">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center text-blue-800 font-bold">
+                            {user?.name ? user.name.charAt(0).toUpperCase() : '?'}
                         </div>
-                        <button // Changed from Link to button to open modal
-                            onClick={() => setIsProfileModalOpen(true)}
-                            className="block w-full text-center py-2 px-4 rounded-lg font-semibold text-blue-600 border border-blue-600 hover:bg-blue-50 transition-colors duration-200"
-                        >
-                            Gérer votre profil
-                        </button>
+                        <div>
+                            <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                            <button onClick={handleLogout} className="text-xs text-red-600 hover:underline flex items-center">
+                                <LogOut className="mr-1 h-3 w-3" /> Déconnexion
+                            </button>
+                        </div>
                     </div>
+                </div>
+            </aside>
 
-                    {/* Section Événements à Venir */}
-                    <div className="md:col-span-2 bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-4">Vos Prochains Événements</h2>
-                        {upcomingEvents.length > 0 ? (
-                            <ul className="space-y-4">
-                                {upcomingEvents.map(event => (
-                                    <li key={event.id} className="p-4 bg-blue-50 rounded-lg flex items-center justify-between shadow-sm border border-blue-100">
-                                        <div>
-                                            <p className="text-lg font-semibold text-blue-800">{event.title}</p>
-                                            <p className="text-sm text-gray-600">{event.date} à {event.location}</p>
-                                        </div>
-                                        <Link href={`/events/${event.id}`} className="text-blue-600 hover:underline font-medium">
-                                            Voir les détails
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-gray-600 italic">Vous n'avez pas encore d'événements à venir. <Link href="/events" className="text-blue-600 hover:underline">Trouvez-en un !</Link></p>
-                        )}
-
-                        {/* Section Événements Passés (optionnel) */}
-                        <h2 className="text-2xl font-bold text-gray-800 mt-8 mb-4">Historique des Événements</h2>
-                        {pastEvents.length > 0 ? (
-                            <ul className="space-y-4">
-                                {pastEvents.map(event => (
-                                    <li key={event.id} className="p-4 bg-gray-50 rounded-lg flex items-center justify-between shadow-sm border border-gray-100 opacity-80">
-                                        <div>
-                                            <p className="text-lg font-semibold text-gray-700">{event.title}</p>
-                                            <p className="text-sm text-gray-500">{event.date} à {event.location}</p>
-                                        </div>
-                                        <Link href={`/events/${event.id}`} className="text-gray-500 hover:underline font-medium">
-                                            Voir les détails
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-gray-600 italic">Aucun événement terminé pour l'instant.</p>
-                        )}
+            {/* Main content */}
+            <main className="flex-1 ml-64 p-8">
+                <header className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Bonjour, {user?.name?.split(' ')[0]} !</h1>
+                        <p className="text-gray-500 mt-1">Bienvenue sur votre tableau de bord.</p>
                     </div>
+                    <Link href="/dashboard/create-event" className="bg-blue-600 text-white px-5 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-sm flex items-center">
+                        <PlusCircle className="mr-2 h-5 w-5" /> Créer un événement
+                    </Link>
+                </header>
+
+                {/* KPIs */}
+                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <StatCard icon={Calendar} title="Événements à venir" value={upcomingEventsCount.toString()} color="blue" />
+                    <StatCard icon={Users} title="Participants Total" value={totalAttendees.toLocaleString('fr-FR')} color="purple" />
+                    <StatCard icon={Ticket} title="Événements créés" value={events.length.toString()} color="green" />
+                    <StatCard icon={DollarSign} title="Revenu Total" value={`${totalRevenue.toLocaleString('fr-FR')} €`} color="yellow" />
+                </section>
+
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                    {/* Tableau des événements */}
+                    <section className="xl:col-span-2 bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Aperçu de vos événements</h2>
+                        {eventsLoading ? (
+                            <div className="py-12 text-center text-gray-500">Chargement des événements...</div>
+                        ) : events.length === 0 ? (
+                            <div className="py-12 text-center text-gray-400 italic">Aucun événement trouvé.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-gray-500 uppercase bg-gray-50">
+                                        <tr>
+                                            <th scope="col" className="px-6 py-3">Événement</th>
+                                            <th scope="col" className="px-6 py-3">Date</th>
+                                            <th scope="col" className="px-6 py-3">Statut</th>
+                                            <th scope="col" className="px-6 py-3">Participants</th>
+                                            <th scope="col" className="px-6 py-3">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {events.slice(0, 4).map(event => (
+                                            <EventRow key={event.id} event={event} />
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Placeholder graphique */}
+                    {/* Graphique des inscriptions par mois */}
+                    <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Inscriptions par mois</h2>
+                        <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={getInscriptionsParMois(events)}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" />
+                                    <YAxis allowDecimals={false} />
+                                    <Tooltip />
+                                    <Bar dataKey="inscrits" fill="#2563eb" radius={[8, 8, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </section>
                 </div>
             </main>
-
-            {/* Pied de page simple */}
-            <footer className="bg-white py-4 text-center text-gray-500 text-sm border-t border-gray-200 mt-8">
-                &copy; {new Date().getFullYear()} EventConnect. Tous droits réservés.
-            </footer>
-
-            {/* --- La Modal de modification du profil (intégrée ici) --- */}
-            {isProfileModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md relative animate-fade-in-up">
-                        {/* Bouton de fermeture de la modal */}
-                        <button
-                            onClick={() => setIsProfileModalOpen(false)} // Ferme la modal au clic
-                            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl font-semibold"
-                        >
-                            &times;
-                        </button>
-
-                        <h2 className="text-3xl font-bold text-center text-gray-800 mb-8">Modifier le Profil</h2>
-
-                        <form onSubmit={handleProfileUpdate} className="space-y-6">
-                            <div>
-                                <label htmlFor="profileName" className="block text-gray-700 text-sm font-semibold mb-2">Nom :</label>
-                                <input
-                                    type="text"
-                                    id="profileName"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={profileName}
-                                    onChange={(e) => setProfileName(e.target.value)}
-                                    disabled={isUpdatingProfile}
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="profileEmail" className="block text-gray-700 text-sm font-semibold mb-2">Email :</label>
-                                <input
-                                    type="email"
-                                    id="profileEmail"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
-                                    value={profileEmail}
-                                    readOnly // L'email est en lecture seule
-                                    disabled={isUpdatingProfile}
-                                />
-                                <p className="text-xs text-gray-500 mt-1">L'email ne peut pas être modifié pour l'instant.</p>
-                            </div>
-
-                            {profileError && (
-                                <p className="text-red-500 text-sm text-center">{profileError}</p>
-                            )}
-
-                            <button
-                                type="submit"
-                                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={isUpdatingProfile}
-                            >
-                                {isUpdatingProfile ? 'Mise à jour...' : 'Mettre à jour le profil'}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
+
+// Mini-composant pour les cartes de statistiques
+
+const StatCard = ({
+    icon: Icon,
+    title,
+    value,
+    color,
+}: {
+    icon: React.ElementType;
+    title: string;
+    value: string;
+    color: StatColor;
+}) => {
+    const colors: Record<StatColor, string> = {
+        blue: 'bg-blue-100 text-blue-800',
+        purple: 'bg-purple-100 text-purple-800',
+        green: 'bg-green-100 text-green-800',
+        yellow: 'bg-yellow-100 text-yellow-800',
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex items-center space-x-4">
+            <div className={`p-3 rounded-full ${colors[color]}`}>
+                <Icon className="h-6 w-6" />
+            </div>
+            <div>
+                <p className="text-sm text-gray-500 font-medium">{title}</p>
+                <p className="text-2xl font-bold text-gray-900">{value}</p>
+            </div>
+        </div>
+    );
+};
+
+type StatColor = 'blue' | 'purple' | 'green' | 'yellow';
+
+const EventRow = ({ event }: { event: Event }) => {
+    const statusClasses = {
+        'À venir': 'bg-blue-100 text-blue-800',
+        'Terminé': 'bg-gray-100 text-gray-800',
+        'Annulé': 'bg-red-100 text-red-800',
+    };
+
+    return (
+        <tr className="bg-white border-b hover:bg-gray-50">
+            <td className="px-6 py-4 font-medium text-gray-900">{event.title}</td>
+            <td className="px-6 py-4 text-gray-600">
+                {new Date(event.date).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}
+            </td>
+            <td className="px-6 py-4">
+                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusClasses[event.status]}`}>
+                    {event.status}
+                </span>
+            </td>
+            <td className="px-6 py-4 text-gray-600">
+                {event.attendees}
+                {event.capacity ? ` / ${event.capacity}` : ''}
+            </td>
+            <td className="px-6 py-4 flex space-x-2">
+                <button className="text-gray-500 hover:text-blue-600"><Eye className="h-5 w-5" /></button>
+                <button className="text-gray-500 hover:text-green-600"><Edit className="h-5 w-5" /></button>
+                <button className="text-gray-500 hover:text-red-600"><Trash2 className="h-5 w-5" /></button>
+            </td>
+        </tr>
+    );
+};
