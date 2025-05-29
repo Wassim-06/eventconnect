@@ -1,0 +1,39 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  email     String    @unique
+  password  String
+  createdAt DateTime  @default(now())
+  events    Event[]   // Un utilisateur peut organiser plusieurs événements
+  // Ajoutez d'autres champs comme updatedAt si nécessaire
+}
+
+model Event {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  description      String?   // Description détaillée de l'événement
+  date             DateTime  // Date et heure de l'événement
+  location         String    // Lieu de l'événement (ex: "Paris La Défense Arena")
+  imageUrl         String?   // URL d'une image pour l'événement (optionnel)
+  category         String?   // Catégorie de l'événement (ex: "Conférence", "Workshop")
+  organizerId      String    @db.ObjectId // L'ID de l'organisateur (lien avec le modèle User)
+  organizer        User      @relation(fields: [organizerId], references: [id])
+  maxAttendees     Int?      // Nombre maximum de participants (optionnel)
+  currentAttendees Int       @default(0) // Nombre actuel de participants
+  isPublished      Boolean   @default(false) // Si l'événement est visible publiquement
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  // bookings         Booking[] // Lien vers le modèle Booking à venir
+}
